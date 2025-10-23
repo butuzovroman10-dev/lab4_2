@@ -1,411 +1,795 @@
 #include <iostream>
-#include <fstream>
 #include <vector>
-#include <cmath>
-#include <chrono>
-#include <iomanip>
-#include <string>
 #include <algorithm>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <cmath>
+#include <string>
 
-// Функция для интегрирования (вариант 6): f(x) = x^2 * sin(x)
-double f(double x) {
-    return x * x * std::sin(x);
-}
-
-// Аналитическое решение интеграла x^2 * sin(x) dx
-double analytical_solution(double a, double b) {
-    auto F = [](double x) {
-        return (2 - x*x) * std::cos(x) + 2*x * std::sin(x);
-    };
-    return F(b) - F(a);
-}
-
-// Метод левых прямоугольников
-double left_rectangle(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = 0.0;
-    for (int i = 0; i < n; i++) {
-        double x = a + i * h;
-        sum += f(x);
+// Функция для создания CSV файла
+void write_csv_file(const std::vector<std::vector<std::string>>& data, const std::string& filename) {
+    std::ofstream file(filename);
+    if (file.is_open()) {
+        for (const auto& row : data) {
+            for (size_t i = 0; i < row.size(); i++) {
+                file << row[i];
+                if (i < row.size() - 1) {
+                    file << ",";
+                }
+            }
+            file << "\n";
+        }
+        file.close();
+        std::cout << "✓ Файл создан: " << filename << std::endl;
+    } else {
+        std::cerr << "✗ Ошибка создания файла: " << filename << std::endl;
     }
-    return sum * h;
 }
 
-// Метод правых прямоугольников
-double right_rectangle(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = 0.0;
-    for (int i = 1; i <= n; i++) {
-        double x = a + i * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод средних прямоугольников
-double mid_rectangle(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = 0.0;
-    for (int i = 0; i < n; i++) {
-        double x = a + (i + 0.5) * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод трапеций
-double trapezoidal(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = (f(a) + f(b)) / 2.0;
-    for (int i = 1; i < n; i++) {
-        double x = a + i * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод Симпсона
-double simpson(double a, double b, int n) {
-    if (n % 2 != 0) n++;
-    double h = (b - a) / n;
-    double sum = f(a) + f(b);
+// Функция counting_sort с сохранением в CSV
+std::vector<int> counting_sort_with_csv(const std::vector<int>& arr, const std::string& base_filename) {
+    if (arr.empty()) return {};
     
-    for (int i = 1; i < n; i += 2) {
-        double x = a + i * h;
-        sum += 4 * f(x);
-    }
+    std::vector<std::vector<std::string>> counting_phase;
+    counting_phase.push_back({"Step", "Element", "Value", "Counter_Array", "Description"});
     
-    for (int i = 2; i < n; i += 2) {
-        double x = a + i * h;
-        sum += 2 * f(x);
+    int max_val = *std::max_element(arr.begin(), arr.end());
+    std::vector<int> count(max_val + 1, 0);
+    
+    // Инициализация
+    std::string init_counters;
+    for (int i = 0; i <= 10; i++) {
+        if (i <= max_val) {
+            init_counters += std::to_string(i) + ":" + std::to_string(count[i]) + " ";
+        }
+    }
+    if (max_val > 10) init_counters += "...";
+    
+    counting_phase.push_back({"0", "-", "-", init_counters, "Инициализация массива подсчета"});
+    
+    // Фаза подсчета
+    for (size_t i = 0; i < arr.size(); i++) {
+        int num = arr[i];
+        count[num]++;
+        
+        std::string counters;
+        int shown = 0;
+        for (int j = 0; j <= max_val && shown < 15; j++) {
+            if (count[j] > 0) {
+                counters += std::to_string(j) + ":" + std::to_string(count[j]) + " ";
+                shown++;
+            }
+        }
+        if (shown >= 15) counters += "...";
+        
+        counting_phase.push_back({
+            std::to_string(i + 1),
+            "arr[" + std::to_string(i) + "]",
+            std::to_string(num),
+            counters,
+            "Увеличиваем count[" + std::to_string(num) + "] до " + std::to_string(count[num])
+        });
     }
     
-    return sum * h / 3.0;
-}
-
-// Функция для измерения времени выполнения
-template<typename Func>
-std::pair<double, long long> measure_time(Func method, double a, double b, int n) {
-    auto start = std::chrono::high_resolution_clock::now();
-    double result = method(a, b, n);
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    write_csv_file(counting_phase, base_filename + "_counting_phase.csv");
     
-    return std::make_pair(result, duration.count());
-}
-
-// Функция для создания графика точности от количества разбиений
-void print_precision_graph(const std::vector<int>& n_values,
-                          const std::vector<std::vector<double>>& errors,
-                          const std::vector<std::string>& method_names) {
-    const int graph_width = 70;
-    const int graph_height = 20;
+    // Фаза восстановления
+    std::vector<std::vector<std::string>> rebuilding_phase;
+    rebuilding_phase.push_back({"Step", "Value", "Remaining", "Sorted_Array", "Action"});
     
-    // Находим диапазон ошибок для масштабирования
-    double min_error = 1e20;
-    double max_error = 1e-20;
+    std::vector<int> sorted_arr;
+    int step = 1;
     
-    for (const auto& method_errors : errors) {
-        for (double error : method_errors) {
-            if (error > 0) {
-                if (error < min_error) min_error = error;
-                if (error > max_error) max_error = error;
+    for (int i = 0; i <= max_val; i++) {
+        if (count[i] > 0) {
+            int remaining = count[i];
+            while (remaining > 0) {
+                sorted_arr.push_back(i);
+                remaining--;
+                
+                std::string sorted_str = "[";
+                for (size_t j = 0; j < sorted_arr.size(); j++) {
+                    sorted_str += std::to_string(sorted_arr[j]);
+                    if (j < sorted_arr.size() - 1) sorted_str += " ";
+                }
+                sorted_str += "]";
+                
+                rebuilding_phase.push_back({
+                    std::to_string(step++),
+                    std::to_string(i),
+                    std::to_string(remaining),
+                    sorted_str,
+                    "Добавлен элемент " + std::to_string(i)
+                });
             }
         }
     }
     
-    std::cout << "\n" << std::string(80, '=') << "\n";
-    std::cout << "ГРАФИК: Зависимость точности от количества разбиений n\n";
-    std::cout << std::string(80, '=') << "\n";
-    std::cout << "Ось Y: -log10(ошибка) (чем выше, тем точнее)\n";
-    std::cout << "Ось X: количество разбиений n\n\n";
+    write_csv_file(rebuilding_phase, base_filename + "_rebuilding_phase.csv");
     
-    // Символы для разных методов
-    std::vector<char> symbols = {'L', 'R', 'M', 'T', 'S'};
-    std::vector<std::string> colors = {"[1;31m", "[1;32m", "[1;33m", "[1;34m", "[1;35m"};
+    return sorted_arr;
+}
+
+// Функция для анализа распределения с сохранением в CSV
+void analyze_distribution_csv(const std::vector<int>& arr, const std::string& filename) {
+    if (arr.empty()) return;
     
-    // Создаем координатную сетку
-    for (int row = graph_height; row >= 0; row--) {
-        // Левая шкала (точность = -log10(ошибка))
-        double precision_value = (static_cast<double>(row) / graph_height) * 15.0; // от 0 до 15 знаков точности
-        std::cout << std::setw(6) << std::fixed << std::setprecision(1) 
-                  << precision_value << " |";
-        
-        // Отображаем точки для каждого метода
-        for (int col = 0; col < graph_width; col++) {
-            // Логарифмическая шкала для n
-            double n_log = std::log10(n_values[0]) + 
-                          (static_cast<double>(col) / graph_width) * 
-                          (std::log10(n_values.back()) - std::log10(n_values[0]));
-            double n_value = std::pow(10, n_log);
+    int max_val = *std::max_element(arr.begin(), arr.end());
+    std::vector<int> count(max_val + 1, 0);
+    int total = arr.size();
+    
+    for (int num : arr) {
+        count[num]++;
+    }
+    
+    std::vector<std::vector<std::string>> analysis_data;
+    analysis_data.push_back({"Value", "Frequency", "Percentage", "Cumulative", "Cumulative_Percentage"});
+    
+    int cumulative = 0;
+    for (int i = 0; i <= max_val; i++) {
+        if (count[i] > 0) {
+            cumulative += count[i];
+            double percentage = static_cast<double>(count[i]) / total * 100;
+            double cumulative_percentage = static_cast<double>(cumulative) / total * 100;
             
-            bool point_drawn = false;
-            for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
-                // Находим ближайшее значение n
-                for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
-                    if (std::abs(std::log10(n_values[n_idx]) - n_log) < 0.1) {
-                        double error = errors[method_idx][n_idx];
-                        if (error > 0) {
-                            double precision = -std::log10(error); // чем выше, тем точнее
-                            int precision_row = static_cast<int>((precision / 15.0) * graph_height);
-                            
-                            if (precision_row == row) {
-                                std::cout << "\033" << colors[method_idx] << symbols[method_idx] << "\033[0m";
-                                point_drawn = true;
-                                break;
-                            }
+            std::stringstream percentage_ss, cumulative_ss;
+            percentage_ss << std::fixed << std::setprecision(2) << percentage;
+            cumulative_ss << std::fixed << std::setprecision(2) << cumulative_percentage;
+            
+            analysis_data.push_back({
+                std::to_string(i),
+                std::to_string(count[i]),
+                percentage_ss.str(),
+                std::to_string(cumulative),
+                cumulative_ss.str()
+            });
+        }
+    }
+    
+    write_csv_file(analysis_data, filename);
+}
+
+// Функция для расчета медианы с сохранением в CSV
+double calculate_median_csv(const std::vector<int>& sorted_arr, const std::string& filename) {
+    if (sorted_arr.empty()) return -1;
+    
+    std::vector<std::vector<std::string>> median_data;
+    median_data.push_back({"Parameter", "Value", "Calculation"});
+    
+    int n = sorted_arr.size();
+    
+    std::string array_str = "[";
+    for (size_t i = 0; i < sorted_arr.size(); i++) {
+        array_str += std::to_string(sorted_arr[i]);
+        if (i < sorted_arr.size() - 1) array_str += " ";
+    }
+    array_str += "]";
+    
+    median_data.push_back({"Array_Size", std::to_string(n), "n = " + std::to_string(n)});
+    median_data.push_back({"Sorted_Array", array_str, "Result of counting sort"});
+    
+    double median;
+    if (n % 2 == 1) {
+        int median_index = n / 2;
+        median = sorted_arr[median_index];
+        median_data.push_back({"Case_Type", "Odd", "n % 2 = 1"});
+        median_data.push_back({"Median_Index", std::to_string(median_index), "n / 2 = " + std::to_string(median_index)});
+        median_data.push_back({"Median_Value", std::to_string(median), "sorted_array[" + std::to_string(median_index) + "]"});
+    } else {
+        int median_index1 = n / 2 - 1;
+        int median_index2 = n / 2;
+        median = (sorted_arr[median_index1] + sorted_arr[median_index2]) / 2.0;
+        
+        std::stringstream median_ss;
+        median_ss << std::fixed << std::setprecision(1) << median;
+        
+        median_data.push_back({"Case_Type", "Even", "n % 2 = 0"});
+        median_data.push_back({"Median_Indices", std::to_string(median_index1) + "," + std::to_string(median_index2), 
+                              "n/2-1, n/2"});
+        median_data.push_back({"Median_Value", median_ss.str(), 
+                              "(" + std::to_string(sorted_arr[median_index1]) + " + " + 
+                              std::to_string(sorted_arr[median_index2]) + ") / 2"});
+    }
+    
+    write_csv_file(median_data, filename);
+    return median;
+}
+
+// Функция для создания итогового отчета
+void create_final_report_csv(const std::vector<int>& original, const std::vector<int>& sorted, 
+                           double median, const std::string& filename) {
+    std::vector<std::vector<std::string>> report;
+    report.push_back({"Metric", "Value", "Description"});
+    
+    report.push_back({"Algorithm", "Counting Sort", "Stable sorting algorithm"});
+    report.push_back({"Input_Size", std::to_string(original.size()), "Number of elements"});
+    report.push_back({"Value_Range", "0-100", "Product ratings range"});
+    
+    std::string input_str, output_str;
+    for (size_t i = 0; i < original.size(); i++) {
+        input_str += std::to_string(original[i]);
+        output_str += std::to_string(sorted[i]);
+        if (i < original.size() - 1) {
+            input_str += " ";
+            output_str += " ";
+        }
+    }
+    
+    report.push_back({"Input_Data", input_str, "Original array"});
+    report.push_back({"Output_Data", output_str, "Sorted array"});
+    
+    std::stringstream median_ss;
+    median_ss << std::fixed << std::setprecision(1) << median;
+    report.push_back({"Median_Value", median_ss.str(), "Median product rating"});
+    
+    int max_val = *std::max_element(original.begin(), original.end());
+    report.push_back({"Time_Complexity", "O(n + k)", "n = " + std::to_string(original.size()) + ", k = " + std::to_string(max_val + 1)});
+    report.push_back({"Space_Complexity", "O(k)", "k = " + std::to_string(max_val + 1)});
+    report.push_back({"Stability", "Yes", "Preserves order of equal elements"});
+    
+    write_csv_file(report, filename);
+}
+
+// Функция для создания HTML файла с графиками
+void create_html_with_charts(const std::vector<int>& original, const std::vector<int>& sorted, double median) {
+    std::ofstream html_file("counting_sort_analysis.html");
+    
+    html_file << R"(<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ Counting Sort - Визуализация</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 30px 0;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .method-info {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .method-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 10px;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .summary {
+            background: #e8f4fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .data-section {
+            background: #f0f8f0;
+            border-left: 4px solid #4CAF50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Анализ алгоритма Counting Sort</h1>
+        
+        <div class="summary">
+            <h3>Исходные данные</h3>
+            <p><strong>Массив:</strong> [)";
+    
+    // Вставляем исходный массив
+    for (size_t i = 0; i < original.size(); i++) {
+        html_file << original[i];
+        if (i < original.size() - 1) html_file << ", ";
+    }
+    
+    html_file << R"(]</p>
+            <p><strong>Размер:</strong> )" << original.size() << R"( элементов</p>
+            <p><strong>Диапазон значений:</strong> 0-100</p>
+        </div>
+
+        <!-- График распределения частот -->
+        <h2>Распределение частот значений</h2>
+        <div class="chart-container">
+            <canvas id="frequencyChart"></canvas>
+        </div>
+
+        <!-- График процесса сортировки -->
+        <h2>Процесс Counting Sort</h2>
+        <div class="chart-container">
+            <canvas id="sortingProcessChart"></canvas>
+        </div>
+
+        <!-- График кумулятивного распределения -->
+        <h2>Кумулятивное распределение</h2>
+        <div class="chart-container">
+            <canvas id="cumulativeChart"></canvas>
+        </div>
+
+        <!-- Сравнительный график -->
+        <h2>Сравнение исходного и отсортированного массива</h2>
+        <div class="chart-container">
+            <canvas id="comparisonChart"></canvas>
+        </div>
+
+        <!-- Таблица с данными -->
+        <h2>Данные распределения</h2>
+        <div class="table-container">
+            <table id="distributionTable">
+                <thead>
+                    <tr>
+                        <th>Значение</th>
+                        <th>Частота</th>
+                        <th>Процент</th>
+                        <th>Кумулятивная частота</th>
+                        <th>Кумулятивный процент</th>
+                    </tr>
+                </thead>
+                <tbody id="distributionTableBody">)";
+
+    // Заполняем таблицу данными
+    int max_val = *std::max_element(original.begin(), original.end());
+    std::vector<int> count(max_val + 1, 0);
+    for (int num : original) {
+        count[num]++;
+    }
+    
+    int cumulative = 0;
+    for (int i = 0; i <= max_val; i++) {
+        if (count[i] > 0) {
+            cumulative += count[i];
+            double percentage = (static_cast<double>(count[i]) / original.size()) * 100;
+            double cumulative_percentage = (static_cast<double>(cumulative) / original.size()) * 100;
+            
+            html_file << "<tr>"
+                      << "<td>" << i << "</td>"
+                      << "<td>" << count[i] << "</td>"
+                      << "<td>" << std::fixed << std::setprecision(2) << percentage << "%</td>"
+                      << "<td>" << cumulative << "</td>"
+                      << "<td>" << std::fixed << std::setprecision(2) << cumulative_percentage << "%</td>"
+                      << "</tr>";
+        }
+    }
+
+    html_file << R"(
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Информация о методе -->
+        <h2>Характеристики Counting Sort</h2>
+        <div class="method-info">
+            <div class="method-card">
+                <h4>Сложность времени</h4>
+                <p><strong>O(n + k)</strong></p>
+                <p>n = )" << original.size() << ", k = " << (max_val + 1) << R"(</p>
+                <p>O()" << original.size() << " + " << (max_val + 1) << ") = O(" << (original.size() + max_val + 1) << R"()</p>
+            </div>
+            <div class="method-card">
+                <h4>Сложность памяти</h4>
+                <p><strong>O(k)</strong></p>
+                <p>k = )" << (max_val + 1) << R"(</p>
+                <p>Требуется массив размером )" << (max_val + 1) << R"(</p>
+            </div>
+            <div class="method-card">
+                <h4>Стабильность</h4>
+                <p><strong>Да</strong></p>
+                <p>Сохраняет порядок равных элементов</p>
+            </div>
+            <div class="method-card">
+                <h4>Применимость</h4>
+                <p><strong>Целые числа</strong></p>
+                <p>Малый диапазон значений</p>
+                <p>Неотрицательные числа</p>
+            </div>
+        </div>
+
+        <!-- Расчет медианы -->
+        <div class="data-section">
+            <h3>Расчет медианы</h3>
+            <p><strong>Отсортированный массив:</strong> [)";
+    
+    // Вставляем отсортированный массив
+    for (size_t i = 0; i < sorted.size(); i++) {
+        html_file << sorted[i];
+        if (i < sorted.size() - 1) html_file << ", ";
+    }
+    
+    html_file << R"(]</p>
+            <p><strong>Размер массива:</strong> )" << sorted.size();
+    
+    if (sorted.size() % 2 == 1) {
+        int median_index = sorted.size() / 2;
+        html_file << " (нечетное)</p>"
+                  << "<p><strong>Медианный индекс:</strong> " << median_index << " (n/2 = " << sorted.size() << "/2 = " << median_index << ")</p>"
+                  << "<p><strong>Медиана:</strong> sorted_array[" << median_index << "] = " << median << "</p>";
+    } else {
+        int median_index1 = sorted.size() / 2 - 1;
+        int median_index2 = sorted.size() / 2;
+        html_file << " (четное)</p>"
+                  << "<p><strong>Медианные индексы:</strong> " << median_index1 << " и " << median_index2 << " (n/2-1 и n/2)</p>"
+                  << "<p><strong>Медиана:</strong> (sorted_array[" << median_index1 << "] + sorted_array[" << median_index2 << "]) / 2 = "
+                  << "(" << sorted[median_index1] << " + " << sorted[median_index2] << ") / 2 = " << median << "</p>";
+    }
+    
+    html_file << R"(
+        </div>
+    </div>
+
+    <script>
+        // Данные из C++ программы
+        const originalArray = [)";
+    
+    for (size_t i = 0; i < original.size(); i++) {
+        html_file << original[i];
+        if (i < original.size() - 1) html_file << ", ";
+    }
+    
+    html_file << R"(];
+        const sortedArray = [)";
+    
+    for (size_t i = 0; i < sorted.size(); i++) {
+        html_file << sorted[i];
+        if (i < sorted.size() - 1) html_file << ", ";
+    }
+    
+    html_file << R"(];
+        
+        // Расчет распределения частот
+        function calculateFrequencyDistribution(arr) {
+            const frequency = {};
+            arr.forEach(num => {
+                frequency[num] = (frequency[num] || 0) + 1;
+            });
+            return frequency;
+        }
+
+        const frequencyData = calculateFrequencyDistribution(originalArray);
+        const values = Object.keys(frequencyData).map(Number).sort((a, b) => a - b);
+        const frequencies = values.map(val => frequencyData[val]);
+
+        // Расчет кумулятивного распределения
+        let cumulative = 0;
+        const cumulativeData = values.map((val, index) => {
+            cumulative += frequencyData[val];
+            return cumulative;
+        });
+
+        const percentages = values.map(val => 
+            ((frequencyData[val] / originalArray.length) * 100).toFixed(1)
+        );
+
+        const cumulativePercentages = cumulativeData.map(cum => 
+            ((cum / originalArray.length) * 100).toFixed(1)
+        );
+
+        // График распределения частот
+        const freqCtx = document.getElementById('frequencyChart').getContext('2d');
+        new Chart(freqCtx, {
+            type: 'bar',
+            data: {
+                labels: values,
+                datasets: [{
+                    label: 'Частота',
+                    data: frequencies,
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Частота'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Значения'
                         }
                     }
                 }
-                if (point_drawn) break;
             }
-            
-            if (!point_drawn) {
-                if (row == 0) {
-                    std::cout << "-"; // Ось X
-                } else {
-                    std::cout << " ";
-                }
-            }
-        }
-        std::cout << "\n";
-    }
-    
-    // Ось X (логарифмическая шкала для n)
-    std::cout << "       +";
-    for (int col = 0; col < graph_width; col++) {
-        std::cout << "-";
-    }
-    std::cout << "> n\n        ";
-    
-    for (int col = 0; col <= graph_width; col += graph_width / 6) {
-        double n_log = std::log10(n_values[0]) + 
-                      (static_cast<double>(col) / graph_width) * 
-                      (std::log10(n_values.back()) - std::log10(n_values[0]));
-        int n_value = static_cast<int>(std::pow(10, n_log));
-        std::cout << std::setw(8) << n_value;
-    }
-    std::cout << "\n";
-    
-    // Легенда
-    std::cout << "\nЛегенда:\n";
-    for (size_t i = 0; i < method_names.size(); i++) {
-        std::cout << "\033" << colors[i] << symbols[i] << "\033[0m - " << method_names[i] << "\n";
-    }
-    std::cout << "\nПримечание: Высота точки показывает количество верных знаков после запятой\n";
-}
+        });
 
-// Функция для создания графика времени от точности
-void print_time_precision_graph(const std::vector<int>& n_values,
-                               const std::vector<std::vector<long long>>& times,
-                               const std::vector<std::vector<double>>& errors,
-                               const std::vector<std::string>& method_names) {
-    const int graph_width = 70;
-    const int graph_height = 20;
-    
-    std::cout << "\n" << std::string(80, '=') << "\n";
-    std::cout << "ГРАФИК: Зависимость времени вычисления от достигнутой точности\n";
-    std::cout << std::string(80, '=') << "\n";
-    std::cout << "Ось Y: время (наносекунды, логарифмическая шкала)\n";
-    std::cout << "Ось X: -log10(ошибка) (количество верных знаков)\n\n";
-    
-    std::vector<char> symbols = {'L', 'R', 'M', 'T', 'S'};
-    std::vector<std::string> colors = {"[1;31m", "[1;32m", "[1;33m", "[1;34m", "[1;35m"};
-    
-    // Находим диапазоны для масштабирования
-    long long max_time = 0;
-    double max_precision = 0;
-    
-    for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
-        for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
-            if (times[method_idx][n_idx] > max_time) max_time = times[method_idx][n_idx];
-            double error = errors[method_idx][n_idx];
-            if (error > 0) {
-                double precision = -std::log10(error);
-                if (precision > max_precision) max_precision = precision;
-            }
-        }
-    }
-    
-    for (int row = graph_height; row >= 0; row--) {
-        // Левая шкала (время)
-        double time_value = std::pow(10, 
-            std::log10(1000.0) + (static_cast<double>(row) / graph_height) * 
-            (std::log10(max_time) - std::log10(1000.0)));
-        
-        if (row % 4 == 0) {
-            if (time_value < 1e6) {
-                std::cout << std::setw(5) << static_cast<int>(time_value/1000) << "K |";
-            } else {
-                std::cout << std::setw(5) << static_cast<int>(time_value/1e6) << "M |";
-            }
-        } else {
-            std::cout << "      |";
-        }
-        
-        // Отображаем точки для каждого метода
-        for (int col = 0; col < graph_width; col++) {
-            double precision_value = (static_cast<double>(col) / graph_width) * max_precision;
-            
-            bool point_drawn = false;
-            for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
-                for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
-                    double error = errors[method_idx][n_idx];
-                    if (error > 0) {
-                        double precision = -std::log10(error);
-                        if (std::abs(precision - precision_value) < 0.3) {
-                            double time_log = std::log10(times[method_idx][n_idx]);
-                            double min_time_log = std::log10(1000.0);
-                            double max_time_log = std::log10(max_time);
-                            int time_row = static_cast<int>(
-                                (max_time_log - time_log) / (max_time_log - min_time_log) * graph_height);
-                            
-                            if (time_row == row) {
-                                std::cout << "\033" << colors[method_idx] << symbols[method_idx] << "\033[0m";
-                                point_drawn = true;
-                                break;
-                            }
+        // График процесса сортировки
+        const sortCtx = document.getElementById('sortingProcessChart').getContext('2d');
+        new Chart(sortCtx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: originalArray.length}, (_, i) => i + 1),
+                datasets: [
+                    {
+                        label: 'Исходный массив',
+                        data: originalArray,
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        tension: 0.1,
+                        pointRadius: 6
+                    },
+                    {
+                        label: 'Отсортированный массив',
+                        data: sortedArray,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1,
+                        pointRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Значения'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Позиция в массиве'
                         }
                     }
                 }
-                if (point_drawn) break;
             }
-            
-            if (!point_drawn) {
-                if (row == graph_height) {
-                    std::cout << "-";
-                } else {
-                    std::cout << " ";
+        });
+
+        // График кумулятивного распределения
+        const cumCtx = document.getElementById('cumulativeChart').getContext('2d');
+        new Chart(cumCtx, {
+            type: 'line',
+            data: {
+                labels: values,
+                datasets: [
+                    {
+                        label: 'Кумулятивная частота',
+                        data: cumulativeData,
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                        yAxisID: 'y',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Кумулятивный процент',
+                        data: cumulativePercentages,
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                        yAxisID: 'y1',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Кумулятивная частота'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Кумулятивный процент (%)'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        },
+                        max: 100
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Значения'
+                        }
+                    }
                 }
             }
-        }
-        std::cout << "\n";
-    }
-    
-    // Ось X (точность)
-    std::cout << "      +";
-    for (int col = 0; col < graph_width; col++) {
-        std::cout << "-";
-    }
-    std::cout << "> точность\n       ";
-    
-    for (int col = 0; col <= graph_width; col += graph_width / 6) {
-        double precision_value = (static_cast<double>(col) / graph_width) * max_precision;
-        std::cout << std::setw(8) << std::fixed << std::setprecision(1) << precision_value;
-    }
-    std::cout << "\n";
-    
-    std::cout << "\nЛегенда:\n";
-    for (size_t i = 0; i < method_names.size(); i++) {
-        std::cout << "\033" << colors[i] << symbols[i] << "\033[0m - " << method_names[i] << "\n";
-    }
-}
+        });
 
-// Функция для создания таблицы точности
-void print_precision_table(const std::vector<int>& n_values,
-                          const std::vector<std::vector<double>>& errors,
-                          const std::vector<std::string>& method_names) {
-    std::cout << "\n" << std::string(100, '=') << "\n";
-    std::cout << "ТАБЛИЦА: Количество верных знаков после запятой\n";
-    std::cout << std::string(100, '=') << "\n";
-    
-    std::cout << std::setw(8) << "n";
-    for (const auto& name : method_names) {
-        std::cout << std::setw(15) << name;
-    }
-    std::cout << "\n" << std::string(100, '-') << "\n";
-    
-    for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
-        std::cout << std::setw(8) << n_values[n_idx];
-        for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
-            double error = errors[method_idx][n_idx];
-            if (error > 0) {
-                double correct_digits = -std::log10(error);
-                std::cout << std::setw(15) << std::fixed << std::setprecision(1) << correct_digits;
-            } else {
-                std::cout << std::setw(15) << "∞";
+        // Сравнительный график
+        const compCtx = document.getElementById('comparisonChart').getContext('2d');
+        new Chart(compCtx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({length: originalArray.length}, (_, i) => `Элемент ${i + 1}`),
+                datasets: [
+                    {
+                        label: 'Исходный массив',
+                        data: originalArray,
+                        backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                    },
+                    {
+                        label: 'Отсортированный массив',
+                        data: sortedArray,
+                        backgroundColor: 'rgba(75, 192, 192, 0.8)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Значения'
+                        }
+                    }
+                }
             }
+        });
+    </script>
+</body>
+</html>)";
+
+    html_file.close();
+    std::cout << "✓ HTML файл с графиками создан: counting_sort_analysis.html" << std::endl;
+}
+
+// Функция для красивого вывода массива в консоль
+void print_array(const std::vector<int>& arr, const std::string& title = "") {
+    if (!title.empty()) {
+        std::cout << title;
+    }
+    std::cout << "[";
+    for (size_t i = 0; i < arr.size(); i++) {
+        std::cout << arr[i];
+        if (i < arr.size() - 1) {
+            std::cout << ", ";
         }
-        std::cout << "\n";
+    }
+    std::cout << "]" << std::endl;
+}
+
+// Функция для вывода медианы с подробным объяснением
+void print_median_explanation(const std::vector<int>& sorted_arr, double median) {
+    int n = sorted_arr.size();
+    std::cout << "📊 РАСЧЕТ МЕДИАНЫ:" << std::endl;
+    std::cout << "   Размер массива: " << n << " элементов" << std::endl;
+    
+    if (n % 2 == 1) {
+        int median_index = n / 2;
+        std::cout << "   Нечетное количество элементов" << std::endl;
+        std::cout << "   Медианный индекс: " << median_index << " (n / 2)" << std::endl;
+        std::cout << "   Медиана = sorted_arr[" << median_index << "] = " << median << std::endl;
+    } else {
+        int median_index1 = n / 2 - 1;
+        int median_index2 = n / 2;
+        std::cout << "   Четное количество элементов" << std::endl;
+        std::cout << "   Медианные индексы: " << median_index1 << " и " << median_index2 << " (n/2-1 и n/2)" << std::endl;
+        std::cout << "   Медиана = (sorted_arr[" << median_index1 << "] + sorted_arr[" << median_index2 << "]) / 2" << std::endl;
+        std::cout << "   Медиана = (" << sorted_arr[median_index1] << " + " << sorted_arr[median_index2] << ") / 2 = " << median << std::endl;
     }
 }
 
+// Основная функция
 int main() {
-    // Параметры для варианта 6
-    double a = 0.0;
-    double b = 3.14159; // π
+    std::cout << "============================================" << std::endl;
+    std::cout << "   COUNTING SORT - ПОЛНЫЙ АНАЛИЗ" << std::endl;
+    std::cout << "============================================" << std::endl;
+    std::cout << std::endl;
     
-    // Значения n для тестирования (больше значений для лучшего графика)
-    std::vector<int> n_values = {10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000};
-    std::vector<std::string> method_names = {
-        "Left Rect", "Right Rect", "Mid Rect", "Trapezoid", "Simpson"
-    };
+    std::vector<int> ratings = {5, 28, 14, 73, 42, 61, 33, 91, 22, 55, 19};
     
-    // Аналитическое решение
-    double analytical = analytical_solution(a, b);
-    std::cout << "АНАЛИТИЧЕСКОЕ РЕШЕНИЕ: ∫x²sin(x)dx от " << a << " до " << b << " = " 
-              << std::setprecision(10) << analytical << "\n";
+    // Вывод исходных данных
+    std::cout << "🎯 ИСХОДНЫЕ ДАННЫЕ:" << std::endl;
+    print_array(ratings, "   Исходный массив: ");
+    std::cout << std::endl;
     
-    // Векторы для хранения результатов
-    std::vector<std::vector<double>> results(method_names.size());
-    std::vector<std::vector<long long>> times(method_names.size());
-    std::vector<std::vector<double>> errors(method_names.size());
+    // 1. Сортировка с сохранением этапов в CSV
+    std::cout << "1. СОРТИРОВКА COUNTING SORT..." << std::endl;
+    std::vector<int> sorted = counting_sort_with_csv(ratings, "counting_sort");
     
-    // Заполняем векторы методов
-    std::vector<double(*)(double, double, int)> methods = {
-        left_rectangle, right_rectangle, mid_rectangle, trapezoidal, simpson
-    };
+    // Вывод отсортированного массива
+    std::cout << std::endl;
+    std::cout << "✅ РЕЗУЛЬТАТЫ СОРТИРОВКИ:" << std::endl;
+    print_array(sorted, "   Отсортированный массив: ");
+    std::cout << std::endl;
     
-    std::cout << "\nВыполняются вычисления для построения графиков точности...\n";
-    std::cout << "Это может занять несколько секунд...\n";
+    // 2. Анализ распределения
+    std::cout << "2. АНАЛИЗ РАСПРЕДЕЛЕНИЯ..." << std::endl;
+    analyze_distribution_csv(ratings, "distribution_analysis.csv");
     
-    // Выполняем вычисления
-    for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
-        std::cout << "Метод: " << method_names[method_idx] << "... ";
-        for (int n : n_values) {
-            auto [result, time] = measure_time(methods[method_idx], a, b, n);
-            results[method_idx].push_back(result);
-            times[method_idx].push_back(time);
-            double error = std::abs(result - analytical);
-            // Избегаем нулевой ошибки для логарифма
-            errors[method_idx].push_back(error > 0 ? error : 1e-20);
-        }
-        std::cout << "готово\n";
-    }
+    // 3. Расчет медианы
+    std::cout << "3. РАСЧЕТ МЕДИАНЫ..." << std::endl;
+    double median = calculate_median_csv(sorted, "median_calculation.csv");
     
-    // Выводим графики и таблицы
-    print_precision_graph(n_values, errors, method_names);
-    print_time_precision_graph(n_values, times, errors, method_names);
-    print_precision_table(n_values, errors, method_names);
+    // Вывод медианы с объяснением
+    std::cout << std::endl;
+    std::cout << "🎯 РЕЗУЛЬТАТ РАСЧЕТА МЕДИАНЫ:" << std::endl;
+    print_median_explanation(sorted, median);
+    std::cout << std::endl;
     
-    // Создаем CSV файл с результатами
-    std::ofstream csv_file("precision_analysis.csv");
-    csv_file << "n,Left_Rectangle_Precision,Right_Rectangle_Precision,Mid_Rectangle_Precision,"
-             << "Trapezoidal_Precision,Simpson_Precision,"
-             << "Left_Rectangle_Time,Right_Rectangle_Time,Mid_Rectangle_Time,"
-             << "Trapezoidal_Time,Simpson_Time\n";
+    // 4. Итоговый отчет
+    std::cout << "4. СОЗДАНИЕ ИТОГОВОГО ОТЧЕТА..." << std::endl;
+    create_final_report_csv(ratings, sorted, median, "final_report.csv");
     
-    for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
-        csv_file << n_values[n_idx];
-        
-        // Точность (количество верных знаков)
-        for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
-            double precision = -std::log10(errors[method_idx][n_idx]);
-            csv_file << "," << precision;
-        }
-        
-        // Время
-        for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
-            csv_file << "," << times[method_idx][n_idx];
-        }
-        
-        csv_file << "\n";
-    }
-    csv_file.close();
+    // 5. Создание HTML файла с графиками
+    std::cout << "5. СОЗДАНИЕ HTML ФАЙЛА С ГРАФИКАМИ..." << std::endl;
+    create_html_with_charts(ratings, sorted, median);
     
-    std::cout << "\n" << std::string(50, '=') << "\n";
-    std::cout << "РЕЗУЛЬТАТЫ СОХРАНЕНЫ В ФАЙЛ: precision_analysis.csv\n";
-    std::cout << std::string(50, '=') << "\n";
+    std::cout << std::endl;
+    std::cout << "🎉 ВСЕ ФАЙЛЫ УСПЕШНО СОЗДАНЫ!" << std::endl;
+    std::cout << std::endl;
+    std::cout << "============================================" << std::endl;
+    std::cout << "📁 СОЗДАННЫЕ ФАЙЛЫ:" << std::endl;
+    std::cout << "============================================" << std::endl;
+    std::cout << "• counting_sort_counting_phase.csv   - Фаза подсчета" << std::endl;
+    std::cout << "• counting_sort_rebuilding_phase.csv - Фаза восстановления" << std::endl;
+    std::cout << "• distribution_analysis.csv          - Анализ распределения" << std::endl;
+    std::cout << "• median_calculation.csv             - Расчет медианы" << std::endl;
+    std::cout << "• final_report.csv                   - Итоговый отчет" << std::endl;
+    std::cout << "• counting_sort_analysis.html        - HTML с графиками" << std::endl;
+    std::cout << std::endl;
+    std::cout << "💡 Откройте counting_sort_analysis.html в браузере для просмотра графиков!" << std::endl;
+    std::cout << std::endl;
     
     return 0;
 }

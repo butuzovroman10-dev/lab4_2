@@ -1,0 +1,6 @@
+Parameter,Value,Calculation
+Array_Size,11,n = 11
+Sorted_Array,[5 14 19 22 28 33 42 55 61 73 91],Result of counting sort
+Case_Type,Odd,n % 2 = 1
+Median_Index,5,n / 2 = 5
+Median_Value,33.000000,sorted_array[5]

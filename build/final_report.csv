@@ -1,0 +1,10 @@
+Metric,Value,Description
+Algorithm,Counting Sort,Stable sorting algorithm
+Input_Size,11,Number of elements
+Value_Range,0-100,Product ratings range
+Input_Data,5 28 14 73 42 61 33 91 22 55 19,Original array
+Output_Data,5 14 19 22 28 33 42 55 61 73 91,Sorted array
+Median_Value,33.0,Median product rating
+Time_Complexity,O(n + k),n = 11, k = 92
+Space_Complexity,O(k),k = 92
+Stability,Yes,Preserves order of equal elements
