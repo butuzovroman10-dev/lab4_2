@@ -94,42 +94,46 @@ std::pair<double, long long> measure_time(Func method, double a, double b, int n
     return std::make_pair(result, duration.count());
 }
 
-// Функция для создания ASCII графика времени выполнения
-void print_time_graph(const std::vector<int>& n_values, 
-                     const std::vector<std::vector<long long>>& times,
-                     const std::vector<std::string>& method_names) {
-    const int graph_width = 60;
+// Функция для создания графика точности от количества разбиений
+void print_precision_graph(const std::vector<int>& n_values,
+                          const std::vector<std::vector<double>>& errors,
+                          const std::vector<std::string>& method_names) {
+    const int graph_width = 70;
     const int graph_height = 20;
     
-    // Находим максимальное время для масштабирования
-    long long max_time = 0;
-    for (const auto& method_times : times) {
-        for (long long time : method_times) {
-            if (time > max_time) max_time = time;
+    // Находим диапазон ошибок для масштабирования
+    double min_error = 1e20;
+    double max_error = 1e-20;
+    
+    for (const auto& method_errors : errors) {
+        for (double error : method_errors) {
+            if (error > 0) {
+                if (error < min_error) min_error = error;
+                if (error > max_error) max_error = error;
+            }
         }
     }
     
     std::cout << "\n" << std::string(80, '=') << "\n";
-    std::cout << "ГРАФИК 1: Время выполнения методов от количества разбиений n\n";
+    std::cout << "ГРАФИК: Зависимость точности от количества разбиений n\n";
     std::cout << std::string(80, '=') << "\n";
+    std::cout << "Ось Y: -log10(ошибка) (чем выше, тем точнее)\n";
+    std::cout << "Ось X: количество разбиений n\n\n";
     
     // Символы для разных методов
-    std::vector<char> symbols = {'#', '@', '*', '+', '~'};
-    std::vector<std::string> colors = {"[1;31m", "[1;32m", "[1;33m", "[1;34m", "[1;35m"}; // ANSI colors
+    std::vector<char> symbols = {'L', 'R', 'M', 'T', 'S'};
+    std::vector<std::string> colors = {"[1;31m", "[1;32m", "[1;33m", "[1;34m", "[1;35m"};
     
     // Создаем координатную сетку
     for (int row = graph_height; row >= 0; row--) {
-        // Левая шкала (время)
-        if (row % 2 == 0) {
-            double time_value = (static_cast<double>(row) / graph_height) * max_time;
-            std::cout << std::setw(8) << std::setprecision(2) 
-                      << (time_value / 1e6) << "M |";
-        } else {
-            std::cout << "         |";
-        }
+        // Левая шкала (точность = -log10(ошибка))
+        double precision_value = (static_cast<double>(row) / graph_height) * 15.0; // от 0 до 15 знаков точности
+        std::cout << std::setw(6) << std::fixed << std::setprecision(1) 
+                  << precision_value << " |";
         
         // Отображаем точки для каждого метода
         for (int col = 0; col < graph_width; col++) {
+            // Логарифмическая шкала для n
             double n_log = std::log10(n_values[0]) + 
                           (static_cast<double>(col) / graph_width) * 
                           (std::log10(n_values.back()) - std::log10(n_values[0]));
@@ -140,13 +144,16 @@ void print_time_graph(const std::vector<int>& n_values,
                 // Находим ближайшее значение n
                 for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
                     if (std::abs(std::log10(n_values[n_idx]) - n_log) < 0.1) {
-                        double time_ratio = static_cast<double>(times[method_idx][n_idx]) / max_time;
-                        int time_row = static_cast<int>(time_ratio * graph_height);
-                        
-                        if (time_row == row) {
-                            std::cout << "\033" << colors[method_idx] << symbols[method_idx] << "\033[0m";
-                            point_drawn = true;
-                            break;
+                        double error = errors[method_idx][n_idx];
+                        if (error > 0) {
+                            double precision = -std::log10(error); // чем выше, тем точнее
+                            int precision_row = static_cast<int>((precision / 15.0) * graph_height);
+                            
+                            if (precision_row == row) {
+                                std::cout << "\033" << colors[method_idx] << symbols[method_idx] << "\033[0m";
+                                point_drawn = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -165,11 +172,11 @@ void print_time_graph(const std::vector<int>& n_values,
     }
     
     // Ось X (логарифмическая шкала для n)
-    std::cout << "         +";
+    std::cout << "       +";
     for (int col = 0; col < graph_width; col++) {
         std::cout << "-";
     }
-    std::cout << "> n\n          ";
+    std::cout << "> n\n        ";
     
     for (int col = 0; col <= graph_width; col += graph_width / 6) {
         double n_log = std::log10(n_values[0]) + 
@@ -185,60 +192,79 @@ void print_time_graph(const std::vector<int>& n_values,
     for (size_t i = 0; i < method_names.size(); i++) {
         std::cout << "\033" << colors[i] << symbols[i] << "\033[0m - " << method_names[i] << "\n";
     }
+    std::cout << "\nПримечание: Высота точки показывает количество верных знаков после запятой\n";
 }
 
-// Функция для создания ASCII графика ошибок
-void print_error_graph(const std::vector<int>& n_values,
-                      const std::vector<std::vector<double>>& errors,
-                      const std::vector<std::string>& method_names) {
-    const int graph_width = 60;
-    const int graph_height = 15;
+// Функция для создания графика времени от точности
+void print_time_precision_graph(const std::vector<int>& n_values,
+                               const std::vector<std::vector<long long>>& times,
+                               const std::vector<std::vector<double>>& errors,
+                               const std::vector<std::string>& method_names) {
+    const int graph_width = 70;
+    const int graph_height = 20;
     
-    // Находим максимальную ошибку для масштабирования
-    double max_error = 1e-10;
-    for (const auto& method_errors : errors) {
-        for (double error : method_errors) {
-            if (error > max_error) max_error = error;
+    std::cout << "\n" << std::string(80, '=') << "\n";
+    std::cout << "ГРАФИК: Зависимость времени вычисления от достигнутой точности\n";
+    std::cout << std::string(80, '=') << "\n";
+    std::cout << "Ось Y: время (наносекунды, логарифмическая шкала)\n";
+    std::cout << "Ось X: -log10(ошибка) (количество верных знаков)\n\n";
+    
+    std::vector<char> symbols = {'L', 'R', 'M', 'T', 'S'};
+    std::vector<std::string> colors = {"[1;31m", "[1;32m", "[1;33m", "[1;34m", "[1;35m"};
+    
+    // Находим диапазоны для масштабирования
+    long long max_time = 0;
+    double max_precision = 0;
+    
+    for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
+        for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
+            if (times[method_idx][n_idx] > max_time) max_time = times[method_idx][n_idx];
+            double error = errors[method_idx][n_idx];
+            if (error > 0) {
+                double precision = -std::log10(error);
+                if (precision > max_precision) max_precision = precision;
+            }
         }
     }
     
-    std::cout << "\n" << std::string(80, '=') << "\n";
-    std::cout << "ГРАФИК 2: Ошибка методов от количества разбиений n\n";
-    std::cout << std::string(80, '=') << "\n";
-    
-    std::vector<char> symbols = {'1', '2', '3', '4', '5'};
-    std::vector<std::string> colors = {"[1;31m", "[1;32m", "[1;33m", "[1;34m", "[1;35m"};
-    
     for (int row = graph_height; row >= 0; row--) {
-        // Левая шкала (ошибка)
-        if (row % 3 == 0) {
-            double error_value = std::pow(10, 
-                std::log10(max_error) - (static_cast<double>(row) / graph_height) * std::log10(max_error));
-            std::cout << std::scientific << std::setprecision(0) 
-                      << std::setw(8) << error_value << " |";
+        // Левая шкала (время)
+        double time_value = std::pow(10, 
+            std::log10(1000.0) + (static_cast<double>(row) / graph_height) * 
+            (std::log10(max_time) - std::log10(1000.0)));
+        
+        if (row % 4 == 0) {
+            if (time_value < 1e6) {
+                std::cout << std::setw(5) << static_cast<int>(time_value/1000) << "K |";
+            } else {
+                std::cout << std::setw(5) << static_cast<int>(time_value/1e6) << "M |";
+            }
         } else {
-            std::cout << "         |";
+            std::cout << "      |";
         }
         
         // Отображаем точки для каждого метода
         for (int col = 0; col < graph_width; col++) {
-            double n_log = std::log10(n_values[0]) + 
-                          (static_cast<double>(col) / graph_width) * 
-                          (std::log10(n_values.back()) - std::log10(n_values[0]));
-            double n_value = std::pow(10, n_log);
+            double precision_value = (static_cast<double>(col) / graph_width) * max_precision;
             
             bool point_drawn = false;
             for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
                 for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
-                    if (std::abs(std::log10(n_values[n_idx]) - n_log) < 0.1) {
-                        double error_log = std::log10(errors[method_idx][n_idx]);
-                        double max_error_log = std::log10(max_error);
-                        int error_row = static_cast<int>((max_error_log - error_log) / max_error_log * graph_height);
-                        
-                        if (error_row == row && errors[method_idx][n_idx] > 0) {
-                            std::cout << "\033" << colors[method_idx] << symbols[method_idx] << "\033[0m";
-                            point_drawn = true;
-                            break;
+                    double error = errors[method_idx][n_idx];
+                    if (error > 0) {
+                        double precision = -std::log10(error);
+                        if (std::abs(precision - precision_value) < 0.3) {
+                            double time_log = std::log10(times[method_idx][n_idx]);
+                            double min_time_log = std::log10(1000.0);
+                            double max_time_log = std::log10(max_time);
+                            int time_row = static_cast<int>(
+                                (max_time_log - time_log) / (max_time_log - min_time_log) * graph_height);
+                            
+                            if (time_row == row) {
+                                std::cout << "\033" << colors[method_idx] << symbols[method_idx] << "\033[0m";
+                                point_drawn = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -246,7 +272,7 @@ void print_error_graph(const std::vector<int>& n_values,
             }
             
             if (!point_drawn) {
-                if (row == 0) {
+                if (row == graph_height) {
                     std::cout << "-";
                 } else {
                     std::cout << " ";
@@ -256,51 +282,51 @@ void print_error_graph(const std::vector<int>& n_values,
         std::cout << "\n";
     }
     
-    // Ось X
-    std::cout << "         +";
+    // Ось X (точность)
+    std::cout << "      +";
     for (int col = 0; col < graph_width; col++) {
         std::cout << "-";
     }
-    std::cout << "> n\n          ";
+    std::cout << "> точность\n       ";
     
     for (int col = 0; col <= graph_width; col += graph_width / 6) {
-        double n_log = std::log10(n_values[0]) + 
-                      (static_cast<double>(col) / graph_width) * 
-                      (std::log10(n_values.back()) - std::log10(n_values[0]));
-        int n_value = static_cast<int>(std::pow(10, n_log));
-        std::cout << std::setw(8) << n_value;
+        double precision_value = (static_cast<double>(col) / graph_width) * max_precision;
+        std::cout << std::setw(8) << std::fixed << std::setprecision(1) << precision_value;
     }
     std::cout << "\n";
     
-    // Легенда
     std::cout << "\nЛегенда:\n";
     for (size_t i = 0; i < method_names.size(); i++) {
         std::cout << "\033" << colors[i] << symbols[i] << "\033[0m - " << method_names[i] << "\n";
     }
 }
 
-// Функция для создания сравнительной гистограммы
-void print_comparison_chart(const std::vector<int>& n_values,
-                           const std::vector<std::vector<long long>>& times,
-                           const std::vector<std::string>& method_names) {
-    std::cout << "\n" << std::string(80, '=') << "\n";
-    std::cout << "ГРАФИК 3: Сравнительная гистограмма времени выполнения (n=" 
-              << n_values.back() << ")\n";
-    std::cout << std::string(80, '=') << "\n";
+// Функция для создания таблицы точности
+void print_precision_table(const std::vector<int>& n_values,
+                          const std::vector<std::vector<double>>& errors,
+                          const std::vector<std::string>& method_names) {
+    std::cout << "\n" << std::string(100, '=') << "\n";
+    std::cout << "ТАБЛИЦА: Количество верных знаков после запятой\n";
+    std::cout << std::string(100, '=') << "\n";
     
-    const int bar_width = 40;
-    long long max_time = 0;
-    for (const auto& method_times : times) {
-        if (method_times.back() > max_time) max_time = method_times.back();
+    std::cout << std::setw(8) << "n";
+    for (const auto& name : method_names) {
+        std::cout << std::setw(15) << name;
     }
+    std::cout << "\n" << std::string(100, '-') << "\n";
     
-    for (size_t i = 0; i < method_names.size(); i++) {
-        long long time = times[i].back();
-        int bar_length = static_cast<int>((static_cast<double>(time) / max_time) * bar_width);
-        
-        std::cout << std::setw(12) << method_names[i] << " | " 
-                  << std::string(bar_length, '#') 
-                  << " " << std::setw(10) << time << " ns\n";
+    for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
+        std::cout << std::setw(8) << n_values[n_idx];
+        for (size_t method_idx = 0; method_idx < method_names.size(); method_idx++) {
+            double error = errors[method_idx][n_idx];
+            if (error > 0) {
+                double correct_digits = -std::log10(error);
+                std::cout << std::setw(15) << std::fixed << std::setprecision(1) << correct_digits;
+            } else {
+                std::cout << std::setw(15) << "∞";
+            }
+        }
+        std::cout << "\n";
     }
 }
 
@@ -309,8 +335,8 @@ int main() {
     double a = 0.0;
     double b = 3.14159; // π
     
-    // Значения n для тестирования
-    std::vector<int> n_values = {10, 100, 1000, 10000, 100000, 1000000};
+    // Значения n для тестирования (больше значений для лучшего графика)
+    std::vector<int> n_values = {10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000};
     std::vector<std::string> method_names = {
         "Left Rect", "Right Rect", "Mid Rect", "Trapezoid", "Simpson"
     };
@@ -330,47 +356,55 @@ int main() {
         left_rectangle, right_rectangle, mid_rectangle, trapezoidal, simpson
     };
     
-    std::cout << "\nВыполняются вычисления...\n";
+    std::cout << "\nВыполняются вычисления для построения графиков точности...\n";
+    std::cout << "Это может занять несколько секунд...\n";
     
     // Выполняем вычисления
     for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
+        std::cout << "Метод: " << method_names[method_idx] << "... ";
         for (int n : n_values) {
             auto [result, time] = measure_time(methods[method_idx], a, b, n);
             results[method_idx].push_back(result);
             times[method_idx].push_back(time);
-            errors[method_idx].push_back(std::abs(result - analytical));
+            double error = std::abs(result - analytical);
+            // Избегаем нулевой ошибки для логарифма
+            errors[method_idx].push_back(error > 0 ? error : 1e-20);
         }
+        std::cout << "готово\n";
     }
     
-    // Выводим графики
-    print_time_graph(n_values, times, method_names);
-    print_error_graph(n_values, errors, method_names);
-    print_comparison_chart(n_values, times, method_names);
+    // Выводим графики и таблицы
+    print_precision_graph(n_values, errors, method_names);
+    print_time_precision_graph(n_values, times, errors, method_names);
+    print_precision_table(n_values, errors, method_names);
     
     // Создаем CSV файл с результатами
-    std::ofstream csv_file("integration_results_with_graphs.csv");
-    csv_file << "n,Left_Rectangle_Result,Right_Rectangle_Result,Mid_Rectangle_Result,Trapezoidal_Result,Simpson_Result,"
-             << "Left_Rectangle_Time,Right_Rectangle_Time,Mid_Rectangle_Time,Trapezoidal_Time,Simpson_Time,"
-             << "Left_Rectangle_Error,Right_Rectangle_Error,Mid_Rectangle_Error,Trapezoidal_Error,Simpson_Error\n";
+    std::ofstream csv_file("precision_analysis.csv");
+    csv_file << "n,Left_Rectangle_Precision,Right_Rectangle_Precision,Mid_Rectangle_Precision,"
+             << "Trapezoidal_Precision,Simpson_Precision,"
+             << "Left_Rectangle_Time,Right_Rectangle_Time,Mid_Rectangle_Time,"
+             << "Trapezoidal_Time,Simpson_Time\n";
     
     for (size_t n_idx = 0; n_idx < n_values.size(); n_idx++) {
         csv_file << n_values[n_idx];
         
+        // Точность (количество верных знаков)
         for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
-            csv_file << "," << results[method_idx][n_idx];
+            double precision = -std::log10(errors[method_idx][n_idx]);
+            csv_file << "," << precision;
         }
+        
+        // Время
         for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
             csv_file << "," << times[method_idx][n_idx];
         }
-        for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
-            csv_file << "," << errors[method_idx][n_idx];
-        }
+        
         csv_file << "\n";
     }
     csv_file.close();
     
     std::cout << "\n" << std::string(50, '=') << "\n";
-    std::cout << "РЕЗУЛЬТАТЫ СОХРАНЕНЫ В ФАЙЛ: integration_results_with_graphs.csv\n";
+    std::cout << "РЕЗУЛЬТАТЫ СОХРАНЕНЫ В ФАЙЛ: precision_analysis.csv\n";
     std::cout << std::string(50, '=') << "\n";
     
     return 0;
