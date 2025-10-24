@@ -1,128 +1,4 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <cmath>
-#include <chrono>
-#include <iomanip>
-#include <string>
-#include <algorithm>
-#include <cstdlib>
-
-// Функция для интегрирования (вариант 6): f(x) = x^2 * sin(x)
-double f(double x) {
-    return x * x * std::sin(x);
-}
-
-// Аналитическое решение интеграла x^2 * sin(x) dx
-double analytical_solution(double a, double b) {
-    auto F = [](double x) {
-        return (2 - x*x) * std::cos(x) + 2*x * std::sin(x);
-    };
-    return F(b) - F(a);
-}
-
-// Метод левых прямоугольников
-double left_rectangle(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = 0.0;
-    for (int i = 0; i < n; i++) {
-        double x = a + i * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод правых прямоугольников
-double right_rectangle(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = 0.0;
-    for (int i = 1; i <= n; i++) {
-        double x = a + i * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод средних прямоугольников
-double mid_rectangle(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = 0.0;
-    for (int i = 0; i < n; i++) {
-        double x = a + (i + 0.5) * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод трапеций
-double trapezoidal(double a, double b, int n) {
-    double h = (b - a) / n;
-    double sum = (f(a) + f(b)) / 2.0;
-    for (int i = 1; i < n; i++) {
-        double x = a + i * h;
-        sum += f(x);
-    }
-    return sum * h;
-}
-
-// Метод Симпсона
-double simpson(double a, double b, int n) {
-    if (n % 2 != 0) n++;
-    double h = (b - a) / n;
-    double sum = f(a) + f(b);
-    
-    for (int i = 1; i < n; i += 2) {
-        double x = a + i * h;
-        sum += 4 * f(x);
-    }
-    
-    for (int i = 2; i < n; i += 2) {
-        double x = a + i * h;
-        sum += 2 * f(x);
-    }
-    
-    return sum * h / 3.0;
-}
-
-// Функция для измерения времени выполнения
-template<typename Func>
-std::pair<double, long long> measure_time(Func method, double a, double b, int n) {
-    auto start = std::chrono::high_resolution_clock::now();
-    double result = method(a, b, n);
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-    
-    return std::make_pair(result, duration.count());
-}
-
-// Функция для расчета линейного тренда
-std::pair<double, double> calculate_trend(const std::vector<double>& x, const std::vector<double>& y) {
-    int n = x.size();
-    double sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
-    
-    for (int i = 0; i < n; i++) {
-        sum_x += x[i];
-        sum_y += y[i];
-        sum_xy += x[i] * y[i];
-        sum_xx += x[i] * x[i];
-    }
-    
-    double slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
-    double intercept = (sum_y - slope * sum_x) / n;
-    
-    return {slope, intercept};
-}
-
-// Функция для создания HTML файла с графиками
-void create_html_with_charts(const std::vector<int>& n_values,
-                            const std::vector<std::vector<double>>& precision,
-                            const std::vector<std::vector<long long>>& times,
-                            const std::vector<std::vector<double>>& errors,
-                            double analytical) {
-    
-    std::ofstream html_file("integration_analysis.html");
-    
-    html_file << R"(<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -224,7 +100,7 @@ void create_html_with_charts(const std::vector<int>& n_values,
             <h3>Исходные данные</h3>
             <p><strong>Функция:</strong> f(x) = x²·sin(x)</p>
             <p><strong>Пределы интегрирования:</strong> [0, π]</p>
-            <p><strong>Аналитическое решение:</strong> )" << std::setprecision(10) << analytical << R"(</p>
+            <p><strong>Аналитическое решение:</strong> 5.869604401</p>
             <p><strong>Тестовые значения n:</strong> 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000</p>
         </div>
 
@@ -340,14 +216,7 @@ void create_html_with_charts(const std::vector<int>& n_values,
 
     <script>
         // Данные из C++ программы
-        const nValues = [)";
-    
-    for (size_t i = 0; i < n_values.size(); i++) {
-        html_file << n_values[i];
-        if (i < n_values.size() - 1) html_file << ", ";
-    }
-    
-    html_file << R"(];
+        const nValues = [10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000];
         
         const methodNames = ["Left Rectangle", "Right Rectangle", "Mid Rectangle", "Trapezoidal", "Simpson"];
         const colors = [
@@ -366,50 +235,13 @@ void create_html_with_charts(const std::vector<int>& n_values,
         ];
         
         // Данные точности
-        const precisionData = {)";
-    
-    std::vector<std::string> method_names = {"Left", "Right", "Mid", "Trapezoidal", "Simpson"};
-    for (size_t i = 0; i < method_names.size(); i++) {
-        html_file << "\"" << method_names[i] << "\": [";
-        for (size_t j = 0; j < precision[i].size(); j++) {
-            html_file << precision[i][j];
-            if (j < precision[i].size() - 1) html_file << ", ";
-        }
-        html_file << "]";
-        if (i < method_names.size() - 1) html_file << ", ";
-    }
-    
-    html_file << R"(};
+        const precisionData = {"Left": [1.090721332, 2.488420104, 3.090365454, 4.487424917, 5.088388527, 6.47765608, 7.069113645, 8.390433798, 8.912527998, 9.939911335, 10.30835862], "Right": [1.090765369, 2.488640207, 3.090805656, 4.489625925, 5.09279057, 6.499670819, 7.11317146, 8.615434983, 9.397558267, 10.30349792, 10.47998893], "Mid": [1.391893898, 2.789564771, 3.391616652, 4.789554068, 5.391613979, 6.789554015, 7.391613985, 8.78955234, 9.39165011, 10.79109445, 11.39339295], "Trapezoidal": [1.09074335, 2.488530142, 3.090585499, 4.488524027, 5.090583971, 6.488523972, 7.090584098, 8.488523295, 9.090583048, 10.48729548, 11.09557163], "Simpson": [3.869834733, 6.731200609, 7.937479434, 10.73410511, 11.93855981, 14.44943979, 20, 13.97231854, 13.15387269, 12.89313729, 13.31113709]};
         
         // Данные времени
-        const timeData = {)";
-    
-    for (size_t i = 0; i < method_names.size(); i++) {
-        html_file << "\"" << method_names[i] << "\": [";
-        for (size_t j = 0; j < times[i].size(); j++) {
-            html_file << times[i][j];
-            if (j < times[i].size() - 1) html_file << ", ";
-        }
-        html_file << "]";
-        if (i < method_names.size() - 1) html_file << ", ";
-    }
-    
-    html_file << R"(};
+        const timeData = {"Left": [1509, 1592, 1744, 6900, 13383, 65981, 132310, 673244, 1405276, 8400398, 15650249], "Right": [1569, 1272, 1762, 6898, 13757, 66937, 134733, 670449, 1373709, 12498703, 15809506], "Mid": [1459, 1252, 1741, 7646, 136288, 94653, 269060, 757838, 1478052, 7552004, 14296970], "Trapezoidal": [742, 943, 1606, 6940, 13247, 65511, 131543, 675976, 1311539, 7576778, 14414792], "Simpson": [962, 1589, 2018, 7450, 14518, 159777, 138756, 862531, 3370082, 7553743, 18637835]};
         
         // Данные ошибок
-        const errorData = {)";
-    
-    for (size_t i = 0; i < method_names.size(); i++) {
-        html_file << "\"" << method_names[i] << "\": [";
-        for (size_t j = 0; j < errors[i].size(); j++) {
-            html_file << errors[i][j];
-            if (j < errors[i].size() - 1) html_file << ", ";
-        }
-        html_file << "]";
-        if (i < method_names.size() - 1) html_file << ", ";
-    }
-    
-    html_file << R"(};
+        const errorData = {"Left": [0.08114815827, 0.003247729845, 0.0008121468168, 3.255180557e-05, 8.158521696e-06, 3.329230926e-07, 8.528769069e-08, 4.06973566e-09, 1.223128265e-09, 1.148388051e-10, 4.916334007e-11], "Right": [0.0811399305, 0.00324608429, 0.0008113240395, 3.238725011e-05, 8.076243966e-06, 3.164675473e-07, 7.705991756e-08, 2.424180856e-09, 4.003517518e-10, 4.971667522e-11, 3.311395602e-11], "Mid": [0.04056076167, 0.001623436211, 0.0004058666328, 1.62347622e-05, 4.058691302e-06, 1.62347642e-07, 4.05869125e-08, 1.623482682e-09, 4.058353653e-10, 1.617728174e-11, 4.042099988e-12], "Trapezoidal": [0.08114404438, 0.003246907067, 0.0008117354281, 3.246952784e-05, 8.11738283e-06, 3.246953195e-07, 8.117380457e-08, 3.246958258e-09, 8.117400085e-10, 3.256150904e-11, 8.024692022e-12], "Simpson": [0.0001349476316, 1.856946499e-07, 1.154836671e-08, 1.844568942e-11, 1.15196741e-12, 3.552713679e-15, 1e-20, 1.065814104e-14, 7.016609516e-14, 1.278976924e-13, 4.884981308e-14]};
         
         // Заполнение таблицы
         const tableBody = document.getElementById('resultsTableBody');
@@ -634,65 +466,4 @@ void create_html_with_charts(const std::vector<int>& n_values,
         initializeCharts();
     </script>
 </body>
-</html>)";
-
-    html_file.close();
-    std::cout << "✓ HTML файл с графиками создан: integration_analysis.html" << std::endl;
-}
-
-int main() {
-    // Параметры для варианта 6
-    double a = 0.0;
-    double b = 3.14159; // π
-    
-    // Значения n для тестирования
-    std::vector<int> n_values = {10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000};
-    
-    // Аналитическое решение
-    double analytical = analytical_solution(a, b);
-    std::cout << "АНАЛИТИЧЕСКОЕ РЕШЕНИЕ: ∫x²sin(x)dx от " << a << " до " << b << " = " 
-              << std::setprecision(10) << analytical << "\n";
-    
-    // Векторы для хранения результатов
-    std::vector<std::vector<double>> results(5);
-    std::vector<std::vector<long long>> times(5);
-    std::vector<std::vector<double>> errors(5);
-    std::vector<std::vector<double>> precision(5);
-    
-    // Заполняем векторы методов
-    std::vector<double(*)(double, double, int)> methods = {
-        left_rectangle, right_rectangle, mid_rectangle, trapezoidal, simpson
-    };
-    
-    std::cout << "\nВыполняются вычисления для построения графиков...\n";
-    
-    // Выполняем вычисления
-    for (size_t method_idx = 0; method_idx < methods.size(); method_idx++) {
-        std::cout << "Метод " << method_idx + 1 << "/5... ";
-        for (int n : n_values) {
-            auto [result, time] = measure_time(methods[method_idx], a, b, n);
-            results[method_idx].push_back(result);
-            times[method_idx].push_back(time);
-            double error = std::abs(result - analytical);
-            errors[method_idx].push_back(error > 0 ? error : 1e-20);
-            precision[method_idx].push_back(-std::log10(errors[method_idx].back()));
-        }
-        std::cout << "готово\n";
-    }
-    
-    // Создаем HTML файл с графиками
-    std::cout << "\nСоздание HTML файла с графиками...\n";
-    create_html_with_charts(n_values, precision, times, errors, analytical);
-    
-    std::cout << "\n" << std::string(60, '=') << "\n";
-    std::cout << "АНАЛИЗ ЗАВЕРШЕН!\n";
-    std::cout << std::string(60, '=') << "\n";
-    std::cout << "📊 Откройте файл 'integration_analysis.html' в браузере для просмотра:\n";
-    std::cout << "   • 5 интерактивных графиков\n";
-    std::cout << "   • Анализ трендов и сложности\n"; 
-    std::cout << "   • Сравнительные таблицы\n";
-    std::cout << "   • Характеристики методов\n";
-    std::cout << std::string(60, '=') << "\n";
-    
-    return 0;
-}
+</html>
